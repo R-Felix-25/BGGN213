@@ -1,0 +1,279 @@
+---
+title: "class09"
+author: "Rachel Felix, PID: A16037641"
+format: pdf
+---
+
+## The PDB database
+
+The main repository for biomolecular structure data is the Protein Data Bank (PDB) https://www.rcsb.org
+
+Let's have a quick look at the composition of this database: 
+
+
+>Q1: What percentage of structures in the PDB are solved by X-Ray and Electron Microscopy.
+
+```{r}
+read.csv("Data Export Summary.csv")
+
+```
+
+
+
+```{r}
+stats <- read.csv("Data Export Summary.csv")
+stats
+```
+
+```{r}
+as.numeric(sub(",", "", stats$X.ray))
+```
+
+This is annoying, lets try a different import function form the **readr** package. 
+First step `install.packages("readr")`
+```{r}
+library(readr)
+
+stats <- read_csv("Data Export Summary.csv")
+stats
+
+```
+Percent X-ray
+```{r}
+n.total <- sum(stats$Total)
+n.xray <-sum(stats$`X-ray`)
+n.em <- sum(stats$EM)
+
+round((n.xray/n.total)*100,2)
+
+round(n.em/n.total *100, 2)
+
+```
+
+>Q2: What proportion of structures in the PDB are protein?
+
+```{r}
+protein <- stats$Total[1]/n.total
+protein
+
+```
+>Q3. Make a bar plot overview of a Molecular type composition using ggplot
+
+```{r}
+library(ggplot2)
+ggplot(stats, 
+       aes(reorder(`Molecular Type`,-Total), Total)) +
+         geom_col()
+```
+
+
+>Q4: Water molecules normally have 3 atoms. Why do we see just one atom per water molecule in this structure?
+
+This is just a default setting in molstar
+
+>Q5: There is a critical “conserved” water molecule in the binding site. Can you identify this water molecule? What residue number does this water molecule have
+
+HOH 308
+
+##Visualizing structure data 
+
+>Q6: Generate and save a figure clearly showing the two distinct chains of HIV-protease along with the ligand. You might also consider showing the catalytic residues ASP 25 in each chain and the critical water (we recommend “Ball & Stick” for these side-chains). Add this figure to your Quarto document.
+
+The Mol* viewer is embeded in many bioinformatics websites. The homepage is https://molstar.org
+
+I can insert any figure or image file using markdown format `![](image name)`
+
+![The HIV-Pr dimer with bound inhibitor](1HSG.png)
+
+Image of HIV-Pr dimer with water molecule 308 highlighted 
+![The catalytic ASP25 ](Water 308.png)
+
+
+
+## Bio3D package for structural bioinformatics
+
+We can use the bio3d package to read and analyze biomolecular data in R:
+
+```{r}
+library(bio3d)
+
+hiv <- read.pdb("1HSG")
+hiv
+```
+
+```{r}
+head(hiv$atom)
+```
+
+
+Let's get the sequence: 
+```{r}
+pdbseq(hiv)
+```
+Let's trim to chain A and get just it's sequence
+```{r}
+chainA <-trim.pdb(hiv, chain="A")
+chainA.seq <- pdbseq(chainA)
+```
+
+Let's blast 
+```{r blast_hiv, cache=TRUE}
+
+blast <- blast.pdb(chainA.seq)
+
+```
+
+
+```{r}
+head(blast$hit.tbl)
+```
+
+Plot a quick overview of blast results
+```{r}
+hits <- plot(blast)
+```
+```{r}
+hits$pdb.id
+```
+
+
+
+##Prediction of functional motions
+
+We can run a Normal Mode Analysis (NMA) to predict large scale motions/flexibility/dynamics of any biomolecule that we can read into R
+
+Let's look at ADK and chain A only!
+
+```{r}
+adk <-read.pdb("1ake")
+
+adk_A <- trim.pdb(adk, chain ="A")
+adk_A
+```
+
+```{r}
+m <- nma(adk_A)
+plot(m)
+```
+
+Let's write out a "trajectory" of predicted motion
+```{r}
+mktrj(m, file="adk_nma.pdb")
+```
+
+
+## Play with 3D viewing in R
+
+We can use the new **bio3dview** package, which is not yet on CRAN, to render interactive 3D view in R and HTML quarto output reports. 
+
+To install from GitHub we can use the **pak** package. 
+
+```{r}
+library(bio3d)
+#view.pdb(adk)
+```
+
+## Reading PDB file data into R
+
+```{r , cache=TRUE}
+library(bio3d)
+pdb <- read.pdb("1hsg")
+```
+```{r}
+pdb
+```
+
+
+>Q7: How many amino acid residues are there in this pdb object? 
+
+198
+
+>Q8: Name one of the two non-protein residues? 
+
+HOH
+
+>Q9: How many protein chains are in this structure? 
+
+2
+
+```{r}
+attributes(pdb)
+```
+```{r}
+head(pdb$atom)
+```
+
+## Predicting functional motions of a single structure
+
+```{r, cache=TRUE}
+adk <- read.pdb("6s36")
+```
+```{r}
+adk
+```
+```{r}
+# Perform flexiblity prediction
+m <- nma(adk)
+plot(m)
+```
+```{r}
+mktrj(m, file="adk_m7.pdb")
+```
+
+
+> Q13. How many amino acids are in this sequence, i.e. how long is this sequence? 
+
+213
+
+> Q14. What do you note about this plot? Are the black and colored lines similar or different? Where do you think they differ most and why?
+
+The black and colored lines are different in magnitude but show similar patterns. They seem to differ most around residue number 50 and 150, this might be due to there being two sites that show distinct fluctuations and flexibility. 
+
+## Comparitive analysis of protein structure
+
+Starting with a sequence or structure ID (accession number) let's run a complete analysis pipeline. 
+
+```{r}
+library(bio3d)
+id <- "1ake_A"
+
+aa <- get.seq(id)
+
+aa
+```
+
+```{r, cache=TRUE}
+blast <- blast.pdb(aa)
+hits <- plot(blast)
+```
+
+```{r}
+hits$pdb.id
+```
+
+Download all these "hits" that are similar to our starting id sequence
+```{r}
+# Download releated PDB files
+files <- get.pdb(hits$pdb.id, path="pdbs", split=TRUE, gzip=TRUE)
+```
+
+
+```{r}
+# Align releated PDBs
+pdbs <- pdbaln(files, fit = TRUE, exefile="msa")
+```
+
+```{r}
+pc.xray<- pca(pdbs)
+plot(pc.xray)
+```
+
+
+```{r}
+plot(pc.xray, 1:2)
+```
+
+```{r}
+mktrj(pc.xray, file="pca_results.pdb")
+```
+
